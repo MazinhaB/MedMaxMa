@@ -429,11 +429,11 @@ void display_run( void ){
 				estado_display = 9;	// Estado vai para a posição 9
 				menu = 8;	// Salva a posição do menu
 				menu_anterior = 7;	// Salva a posição do menu anterior
-				menuConfig = 0;	// menuConfig recebe 0
+				menuServico = 0;	// menuServico recebe 0
 				clear_display_text();	// Limpa a tela
 				send_command(Display_mode_text | Display_mode_graphic);
 				desenho_servicos1(); // Escreve tela de Manutenção
-				WriteMenuName(menuConfig, SERVICO);	// Escreve o título do comando
+				WriteMenuName(menuServico, SERVICO);	// Escreve o título do comando
 			}
 
 			readQueueKeyboard = 0;
@@ -613,7 +613,7 @@ void display_run( void ){
 			// Senão se tecla igual a 1 ou menuConfig igual a 0 e tecla igual a yes
 			else if(readQueueKeyboard == dois || ( menuServico == 1 && readQueueKeyboard == yes ) ){
 				menuServico = 0;	// menuServico recebe 2
-				AtualizaHoraRTC();	// Chama a função AjustaHora();
+				DadosDeCalibracao();	// Chama a função DadosDeCalibração();
 				clear_display_text();	// Limpa a tela
 				desenho_configuracao1();	// Desenha o menu 1
 				WriteMenuName(menuServico, SERVICO);	// Escreve o título do comando selecionado
@@ -650,13 +650,13 @@ unsigned char status( unsigned char tipo ){
 		while(!((reg & 0x03) == 0x03)){
 
 			reg = ( db7_read << 7 )
-						| ( db6_read << 6 )
-						| ( db5_read << 5 )
-						| ( db4_read << 4 )
-						| ( db3_read << 3 )
-						| ( db2_read << 2 )
-						| ( db1_read << 1 )
-						| db0_read;
+								| ( db6_read << 6 )
+								| ( db5_read << 5 )
+								| ( db4_read << 4 )
+								| ( db3_read << 3 )
+								| ( db2_read << 2 )
+								| ( db1_read << 1 )
+								| db0_read;
 
 			reg = reg;
 
@@ -668,13 +668,13 @@ unsigned char status( unsigned char tipo ){
 		while(!((reg & 0x80) == 0x80)){
 
 			reg = ( db7_read << 7 )
-						| ( db6_read << 6 )
-						| ( db5_read << 5 )
-						| ( db4_read << 4 )
-						| ( db3_read << 3 )
-						| ( db2_read << 2 )
-						| ( db1_read << 1 )
-						| db0_read;
+								| ( db6_read << 6 )
+								| ( db5_read << 5 )
+								| ( db4_read << 4 )
+								| ( db3_read << 3 )
+								| ( db2_read << 2 )
+								| ( db1_read << 1 )
+								| db0_read;
 
 			reg = reg;
 
@@ -712,13 +712,13 @@ unsigned char read_data( void ){
 	ce_off;
 
 	reg = ( db7_read << 7 )
-				| ( db6_read << 6 )
-				| ( db5_read << 5 )
-				| ( db4_read << 4 )
-				| ( db3_read << 3 )
-				| ( db2_read << 2 )
-				| ( db1_read << 1 )
-				| db0_read;
+						| ( db6_read << 6 )
+						| ( db5_read << 5 )
+						| ( db4_read << 4 )
+						| ( db3_read << 3 )
+						| ( db2_read << 2 )
+						| ( db1_read << 1 )
+						| db0_read;
 
 	reg = reg;
 
@@ -5394,7 +5394,9 @@ unsigned long long EscreveCodigoDeBarras( void )
 void DadosDeCalibracao(void){
 
 	clear_display_text();
-	unsigned char contaCalibracao = 0;
+	unsigned char contaCalibracao = 0; // Salva a quantidade de calibrações que foram feitas
+	unsigned int estadoCalib = 0; // Salva qual calibração será mostrada na tela
+	unsigned int medidaCalK = 0, medidaCalNa = 0, medidaCalCl = 0, medidaCalCa = 0, medidaCalpH = 0; // Salva os valores de calibração
 
 	if( *(volatile unsigned int *)(ADDR_CALIBRACAO) == 0xFFFFFFFF ){	// Se a memória foi escrita
 		escrita_texto(155, "SEM DADOS GRAVADOS", sizeof("SEM DADOS GRAVADOS"));
@@ -5405,9 +5407,63 @@ void DadosDeCalibracao(void){
 		if( *(volatile unsigned int *)(i) == 0xFFFFFFFF ){ // Chegou ao final
 			break;
 		}
-	contaCalibracao++;
+		contaCalibracao++;
 	}
 
+	// Inicia mostrando a última calibração feita
+	estadoCalib = contaCalibracao - 1;
+
+	// Se pressionado botão para a esquerda volta a primeira calibração feita (circular?)
+	if(verifyKeyBoard() == left)
+	{
+		if(estadoCalib == 0)
+			estadoCalib = contaCalibracao - 1; // Para função de menu circular, se chegar ao final à esquerda volta para a útlima calibração feita
+		else // Senão
+			estadoCalib--; // Volta uma calibração
+	}
+
+	// Se pressionado botão para a direita vai até a última calibração feita (circular?)
+	else if(verifyKeyBoard() == right)
+	{
+		if(estadoCalib == contaCalibracao - 1)
+			estadoCalib = 0; // Para função de menu circular, se chegar ao final à direita volta para a primeira calibração feita
+		else // Senão
+			estadoCalib++; // Avança uma calibração
+	}
+
+	// Armazena os valores de calibração já feitos
+	medidaCalK = *(volatile unsigned short *)(estadoCalib);
+	medidaCalNa = *(volatile unsigned short *)(estadoCalib + DADO_MEMORIA);
+	medidaCalCl = *(volatile unsigned short *)(estadoCalib + DADO_MEMORIA * 2);
+	medidaCalCa = *(volatile unsigned short *)(estadoCalib + DADO_MEMORIA * 3);
+	medidaCalpH = *(volatile unsigned short *)(estadoCalib + DADO_MEMORIA * 4);
+
+	// Mostra os valores
+	escrita_texto(92, "K  =   4.00 mmol/L  ", sizeof( "K  =   4.00 mmol/L  "));
+	escrita_texto(112, ConverteNumParaLcd(ContaDigitos(medidaCalK), 1, medidaCalK), ContaCaracteres()+1);
+	escrita_texto(118, "mV", sizeof( "mV"));
+
+	escrita_texto(151, "Na  = 140.00 mmol/L  ", sizeof("Na  = 140.00 mmol/L  "));
+	//escrita_texto(172, numtolcd(medidaCalNa, CAL), 7);
+	escrita_texto(172, ConverteNumParaLcd(ContaDigitos(medidaCalNa), 1, medidaCalNa), ContaCaracteres()+1);
+	escrita_texto(178, "mV", sizeof( "mV"));
+
+	escrita_texto(211, "Cl  = 100.00 mmol/L  ", sizeof("Cl  = 100.00 mmol/L  "));
+	//escrita_texto(232, numtolcd(medidaCalCl, CAL), 7);
+	escrita_texto(232, ConverteNumParaLcd(ContaDigitos(medidaCalCl), 1, medidaCalCl), ContaCaracteres()+1);
+	escrita_texto(238, "mV", sizeof( "mV"));
+
+	escrita_texto(271, "Ca  =   1.25 mmol/L  ", sizeof("Ca  =   1.25 mmol/L  "));
+	//escrita_texto(292, numtolcd(medidaCalCa, CAL), 7);
+	escrita_texto(292, ConverteNumParaLcd(ContaDigitos(medidaCalCa), 1, medidaCalCa), ContaCaracteres()+1);
+	escrita_texto(298, "mV", sizeof( "mV"));
+
+	escrita_texto(331, "pH  =   7.40         ", sizeof("pH  =   7.40         "));
+	//escrita_texto(352, numtolcd(medidaCalpH, CAL), 7);
+	escrita_texto(352, ConverteNumParaLcd(ContaDigitos(medidaCalpH), 1, medidaCalpH), ContaCaracteres()+1);
+	escrita_texto(358, "mV", sizeof( "mV"));
+
+	return;
 }
 
 
